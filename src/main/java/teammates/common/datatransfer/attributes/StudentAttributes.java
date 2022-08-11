@@ -3,7 +3,9 @@ package teammates.common.datatransfer.attributes;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import teammates.common.util.Config;
@@ -232,6 +234,26 @@ public class StudentAttributes extends EntityAttributes<CourseStudent> {
     public static void sortByTeamName(List<StudentAttributes> students) {
         students.sort(Comparator.comparing((StudentAttributes student) -> student.team)
                 .thenComparing(student -> student.name));
+    }
+
+    /**
+     * Groups the list of students by the team name.
+     * @param students the list of students
+     * @return the map that maps team name to a list of team members
+     */
+    public static Map<String, List<StudentAttributes>> groupByTeamName(List<StudentAttributes> students) {
+        Map<String, List<StudentAttributes>> teams = new HashMap<>();
+        for (StudentAttributes student : students) { // Group new students by team
+            String team = student.getTeam();
+            if (!teams.containsKey(team)) {
+                List<StudentAttributes> teamMembers = new ArrayList<>();
+                teamMembers.add(student);
+                teams.put(team, teamMembers);
+            } else {
+                teams.get(team).add(student);
+            }
+        }
+        return teams;
     }
 
     @Override
