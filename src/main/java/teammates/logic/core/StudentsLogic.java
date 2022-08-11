@@ -393,13 +393,20 @@ public final class StudentsLogic {
         assignSectionToStudents(studentList, teamAndCorrespondingSection, sectionAndStudentCount);
     }
 
+    /**
+     * Assigns a section to each student whose section is not assigned.
+     * @param students the list of newly added students
+     * @param teamWithCorrespondingSection a map that contains team name as keys and its corresponding section as values
+     * @param sectionAndCount a map that contains section name as keys and its size as values
+     * @throws EnrollException if it is impossible to do assign section for certain student
+     */
     private void assignSectionToStudents(List<StudentAttributes> students,
                                             Map<String, String> teamWithCorrespondingSection,
                                             Map<String, Integer> sectionAndCount) throws EnrollException {
         Map<String, List<StudentAttributes>> teams = StudentAttributes.groupByTeamName(students);
         Set<String> assignedTeams = new HashSet<>();
 
-        // Assigns each team to a section if possible.
+        // Assigns students with a team that is associated with an original section first.
         for (String team : teams.keySet()) {
             List<StudentAttributes> teamMembers = teams.get(team);
             int teamSize = teamMembers.size();
@@ -407,7 +414,6 @@ public final class StudentsLogic {
             // If team is associated with a section, the student must be added to that section.
             if (teamWithCorrespondingSection.containsKey(team)) {
                 String sectionToAssign = teamWithCorrespondingSection.get(team);
-                System.out.println("Team: " + team + ": is already associated with section " + sectionToAssign);
                 // Assigns each team member to the section allocated.
                 int newSectionCount = sectionAndCount.get(sectionToAssign) + teamSize;
                 if (newSectionCount > Const.SECTION_SIZE_LIMIT) {
@@ -419,6 +425,7 @@ public final class StudentsLogic {
             }
         }
 
+        // Then assigns student that does not belong to a team that exists before.
         for (String team : teams.keySet()) {
             if (assignedTeams.contains(team)) {
                 continue;
@@ -439,7 +446,6 @@ public final class StudentsLogic {
                         isSectionAssigned = true;
                     }
                 }
-                System.out.println("Team: " + team + ": is assigned to section " + sectionToAssign);
             }
 
             if (!isSectionAssigned) { // creates new section for the team if cannot find existing section to be used
@@ -450,7 +456,6 @@ public final class StudentsLogic {
                         sectionToAssign = newSectionName;
                         sectionAndCount.put(newSectionName, 0);
                         isSectionAssigned = true;
-                        System.out.println("Team: " + team + ": is assigned to newly created section " + sectionToAssign);
                         break;
                     }
                     currentSectionNumber++;
