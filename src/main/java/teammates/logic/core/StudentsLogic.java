@@ -311,7 +311,9 @@ public final class StudentsLogic {
     /**
      * Validates sections for any limit violations and teams for any team name violations.
      */
-    public void validateSectionsAndTeams(List<StudentAttributes> mergedList, String courseId) throws EnrollException {
+    public void validateSectionsAndTeams(List<StudentAttributes> studentList, String courseId) throws EnrollException {
+
+        List<StudentAttributes> mergedList = getMergedList(studentList, courseId);
 
         if (mergedList.size() < 2) { // no conflicts
             return;
