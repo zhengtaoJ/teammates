@@ -900,6 +900,15 @@ public class Logic {
         studentsLogic.validateSectionsAndTeams(studentList, courseId);
     }
 
+    public void completeUnassignedSections(List<StudentAttributes> studentList, String courseId)
+            throws EnrollException {
+
+        assert studentList != null;
+        assert courseId != null;
+
+        studentsLogic.completeUnassignedSections(studentList, courseId);
+    }
+
     /**
      * Gets all students of a team.
      */

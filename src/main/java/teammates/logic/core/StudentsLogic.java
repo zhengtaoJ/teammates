@@ -3,7 +3,11 @@ package teammates.logic.core;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.StringJoiner;
 
 import teammates.common.datatransfer.AttributesDeletionQuery;
@@ -34,6 +38,9 @@ public final class StudentsLogic {
             "You are trying enroll more than %s students in section \"%s\".";
     static final String ERROR_ENROLL_EXCEED_SECTION_LIMIT_INSTRUCTION =
             "To avoid performance problems, please do not enroll more than %s students in a single section.";
+
+    static final String ERROR_CANNOT_ASSIGN_SECTION_AUTOMATICALLY =
+            "Section is not specified for some students, tried but cannot assign section to them automatically.";
 
     private static final StudentsLogic instance = new StudentsLogic();
 
@@ -335,6 +342,149 @@ public final class StudentsLogic {
             }
         }
         return mergedList;
+    }
+
+    /**
+     * Assigns section, using integer values, if the merged list is larger than {@code Const.SECTION_SIZE_LIMIT},
+     * and there is any student with section unassigned in the added student list.
+     */
+    public void completeUnassignedSections(List<StudentAttributes> studentList, String courseId)
+            throws EnrollException {
+
+        List<StudentAttributes> mergedList = getMergedList(studentList, courseId);
+        List<StudentAttributes> listBeforeMerge = getStudentsForCourse(courseId);
+
+        if (mergedList.size() <= Const.SECTION_SIZE_LIMIT) { // not exceeding section size limit
+            return;
+        }
+
+        Map<String, Integer> sectionAndStudentCount = new HashMap<>();
+        Map<String, String> teamAndCorrespondingSection = new HashMap<>(); // team and its corresponding section
+
+        for (StudentAttributes student : listBeforeMerge) { // updates the hashmaps based on list before merge
+            String section = student.getSection();
+            String team = student.getTeam();
+
+            if (sectionAndStudentCount.containsKey(section)) { // updates hashmap for section and student count
+                int currentCount = sectionAndStudentCount.get(section);
+                sectionAndStudentCount.put(section, currentCount + 1);
+            } else {
+                sectionAndStudentCount.put(section, 1);
+            }
+
+            if (!teamAndCorrespondingSection.containsKey(team)) {
+                teamAndCorrespondingSection.put(team, section);
+            }
+        }
+
+        // Updates the hashmaps based on list to be enrolled, ignores those with section left empty.
+        for (StudentAttributes student : studentList) {
+            String section = student.getSection();
+            String team = student.getTeam();
+
+            if (section.equals(Const.DEFAULT_SECTION)) { // if section is not entered, section needs to be updated.
+                continue;
+            }
+
+            if (!teamAndCorrespondingSection.containsKey(team)) {
+                teamAndCorrespondingSection.put(team, section);
+            }
+        }
+
+        // Checks if there is any student in the list to enrolled with unassigned section, and assign.
+        assignSectionToStudents(studentList, teamAndCorrespondingSection, sectionAndStudentCount);
+    }
+
+    /**
+     * Assigns a section to each student whose section is not assigned.
+     * @param students the list of newly added students
+     * @param teamWithCorrespondingSection a map that contains team name as keys and its corresponding section as values
+     * @param sectionAndCount a map that contains section name as keys and its size as values
+     * @throws EnrollException if it is impossible to do assign section for certain student
+     */
+    private void assignSectionToStudents(List<StudentAttributes> students,
+                                            Map<String, String> teamWithCorrespondingSection,
+                                            Map<String, Integer> sectionAndCount) throws EnrollException {
+        Map<String, List<StudentAttributes>> teams = StudentAttributes.groupByTeamName(students);
+        Set<String> assignedTeams = new HashSet<>();
+
+        // Assigns students with a team that is associated with an original section first.
+        for (String team : teams.keySet()) {
+            List<StudentAttributes> teamMembers = teams.get(team);
+            int teamSize = teamMembers.size();
+
+            // If team is associated with a section, the student must be added to that section.
+            if (teamWithCorrespondingSection.containsKey(team)) {
+                String sectionToAssign = teamWithCorrespondingSection.get(team);
+                // Assigns each team member to the section allocated.
+                int newSectionCount = sectionAndCount.get(sectionToAssign) + teamSize;
+                if (newSectionCount > Const.SECTION_SIZE_LIMIT) {
+                    throw new EnrollException(ERROR_CANNOT_ASSIGN_SECTION_AUTOMATICALLY);
+                }
+                assignSectionToUnassignedTeamMembers(sectionToAssign, teamMembers);
+                sectionAndCount.put(sectionToAssign, newSectionCount);
+                assignedTeams.add(team);
+            }
+        }
+
+        // Then assigns student that does not belong to a team that exists before.
+        for (String team : teams.keySet()) {
+            if (assignedTeams.contains(team)) {
+                continue;
+            }
+
+            List<StudentAttributes> teamMembers = teams.get(team);
+            int teamSize = teamMembers.size();
+            String sectionToAssign = null;
+            boolean isSectionAssigned = false;
+
+            if (!isSectionAssigned) { // finds the section with minimum count to assign, if possible
+                int minCount = Const.SECTION_SIZE_LIMIT;
+                for (String section : sectionAndCount.keySet()) {
+                    int count = sectionAndCount.get(section);
+                    if (count + teamSize <= minCount) {
+                        sectionToAssign = section;
+                        minCount = count;
+                        isSectionAssigned = true;
+                    }
+                }
+            }
+
+            if (!isSectionAssigned) { // creates new section for the team if cannot find existing section to be used
+                int currentSectionNumber = 1;
+                while (true) {
+                    String newSectionName = Integer.toString(currentSectionNumber);
+                    if (!sectionAndCount.containsKey(newSectionName)) {
+                        sectionToAssign = newSectionName;
+                        sectionAndCount.put(newSectionName, 0);
+                        isSectionAssigned = true;
+                        break;
+                    }
+                    currentSectionNumber++;
+                }
+            }
+
+            // Assigns each team member to the section allocated.
+            if (!sectionAndCount.containsKey(sectionToAssign)) {
+                sectionAndCount.put(sectionToAssign, 0);
+            }
+            int newSectionCount = sectionAndCount.get(sectionToAssign) + teamSize;
+            if (newSectionCount > Const.SECTION_SIZE_LIMIT) {
+                throw new EnrollException(ERROR_CANNOT_ASSIGN_SECTION_AUTOMATICALLY);
+            }
+            assignSectionToUnassignedTeamMembers(sectionToAssign, teamMembers);
+            sectionAndCount.put(sectionToAssign, newSectionCount);
+            teamWithCorrespondingSection.put(team, sectionToAssign);
+            assignedTeams.add(team);
+        }
+    }
+
+    private static void assignSectionToUnassignedTeamMembers(String section, List<StudentAttributes> teamMembers) {
+        for (StudentAttributes student : teamMembers) {
+            if (student.getSection().equals(Const.DEFAULT_SECTION)) {
+                student.setSection(section);
+            }
+        }
     }
 
     /**

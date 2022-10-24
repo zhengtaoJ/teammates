@@ -62,6 +62,8 @@ class EnrollStudentsAction extends Action {
         });
 
         try {
+            // completes unassigned sections if possible
+            logic.completeUnassignedSections(studentsToEnroll, courseId);
             logic.validateSectionsAndTeams(studentsToEnroll, courseId);
         } catch (EnrollException e) {
             throw new InvalidOperationException(e);
